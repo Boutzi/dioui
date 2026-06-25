@@ -141,9 +141,19 @@ def _draw_half(c, x0, data):
 
     c.setFillColor(colors.black)
     c.setFont("Helvetica-Bold", 8.5)
-    c.drawString(ML, y, "Nom :")
-    c.drawString(ML + LABEL_W + 4 * mm, y, "Prénom :")
-    y -= 5 * mm
+    NOM_H = 7 * mm
+    # Nom
+    c.setStrokeColor(colors.black); c.setFillColor(colors.white); c.setLineWidth(0.5)
+    c.rect(ML, y - NOM_H, CW, NOM_H, fill=1, stroke=1)
+    c.setFillColor(colors.black)
+    c.drawString(ML + 1.5 * mm, y - NOM_H / 2 - 1.5, "Nom :")
+    y -= NOM_H + 2 * mm
+    # Prénom
+    c.setStrokeColor(colors.black); c.setFillColor(colors.white); c.setLineWidth(0.5)
+    c.rect(ML, y - NOM_H, CW, NOM_H, fill=1, stroke=1)
+    c.setFillColor(colors.black)
+    c.drawString(ML + 1.5 * mm, y - NOM_H / 2 - 1.5, "Prénom :")
+    y -= NOM_H + 3 * mm
 
     for label, value, rh in [
         ("Date",        data["date"],        7 * mm),
@@ -719,7 +729,8 @@ class App(ctk.CTk):
             df["_excel_row"] = range(2, len(df) + 2)
             df = df.drop(columns=["nom_jeune"], errors="ignore")
             df = df.dropna(subset=["h_debut", "h_fin", "description"])
-            df = df.reset_index(drop=True)
+            df["date"] = pd.to_datetime(df["date"], dayfirst=True, errors="coerce")
+            df = df.sort_values("date").reset_index(drop=True)
         except Exception as e:
             messagebox.showerror("Erreur de lecture", str(e))
             return
