@@ -1,0 +1,86 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: GenerateurADP.exe
+            exe_path: dist/GenerateurADP.exe
+          - os: ubuntu-latest
+            artifact: GenerateurADP-linux
+            exe_path: dist/GenerateurADP
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system deps (Linux only)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y python3-tk
+
+      - name: Install Python deps
+        run: pip install -r requirements.txt pyinstaller
+
+      - name: Build
+        run: pyinstaller dioui.spec --noconfirm
+
+      - name: Read version
+        id: version
+        shell: python
+        run: |
+          import json, os
+          v = json.load(open("package.json"))["version"]
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"version={v}\n")
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}-v${{ steps.version.outputs.version }}
+          path: ${{ matrix.exe_path }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version
+        id: version
+        run: echo "version=$(python3 -c "import json; print(json.load(open('package.json'))['version'])")" >> $GITHUB_OUTPUT
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: "v${{ steps.version.outputs.version }}"
+          body: |
+            ## Générateur ADP v${{ steps.version.outputs.version }}
+
+            ### Téléchargements
+            - **Windows** : `GenerateurADP.exe`
+            - **Linux (Ubuntu)** : `GenerateurADP-linux`
+          files: |
+            artifacts/**/*
+          make_latest: true

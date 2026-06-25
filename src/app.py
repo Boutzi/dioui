@@ -7,6 +7,7 @@ import queue
 from pathlib import Path
 
 import pandas as pd
+from PIL import Image
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.units import mm
 from reportlab.lib import colors
@@ -14,17 +15,32 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader, simpleSplit
 
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+import customtkinter as ctk
+
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("blue")
 
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
 
+import json as _json
+def _read_version():
+    for candidate in [
+        Path(getattr(sys, "_MEIPASS", "")) / "package.json",
+        Path(__file__).parent.parent / "package.json",
+    ]:
+        if candidate.exists():
+            return _json.loads(candidate.read_text(encoding="utf-8")).get("version", "?")
+    return "?"
+APP_VERSION = _read_version()
+
 BASE_DIR   = Path(__file__).parent.parent
 OUTPUT_DIR = BASE_DIR / "output"
-ASSETS_DIR = Path(__file__).parent / "assets"
-LOGO_PATH  = ASSETS_DIR / "image1.png"
-CAF_PATH   = ASSETS_DIR / "image2.png"
+_BASE      = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
+ASSETS_DIR = _BASE / "assets"
+LOGO_PATH  = ASSETS_DIR / "logo-white.png"
+CAF_PATH   = ASSETS_DIR / "caf.png"
 
 VALID_SHEETS = ["missions_hiver", "missions_printemps", "missions_ete", "missions_automne"]
 SHEET_LABELS = {
@@ -36,37 +52,8 @@ SHEET_LABELS = {
 
 # PDF constants
 PAGE_W, PAGE_H = landscape(A4)
-HALF_W = PAGE_W / 2
+HALF_W  = PAGE_W / 2
 PDF_BLUE = colors.HexColor("#1F4E79")
-
-# ---------------------------------------------------------------------------
-# Palette & fonts
-# ---------------------------------------------------------------------------
-
-BG        = "#F0F2F5"
-CARD      = "#FFFFFF"
-HEADER_BG = "#1F4E79"
-HEADER_FG = "#FFFFFF"
-ACCENT    = "#2563EB"
-ACCENT_H  = "#1D4ED8"
-ACCENT_D  = "#BFDBFE"
-BORDER    = "#E2E8F0"
-TEXT      = "#1E293B"
-MUTED     = "#94A3B8"
-ROW_ODD   = "#F8FAFC"
-ROW_EVEN  = "#FFFFFF"
-ROW_SEL   = "#DBEAFE"
-LOG_BG    = "#0F172A"
-LOG_FG    = "#94A3B8"
-LOG_OK    = "#4ADE80"
-LOG_ERR   = "#F87171"
-LOG_INFO  = "#60A5FA"
-
-F_TITLE  = ("Segoe UI", 13, "bold")
-F_BODY   = ("Segoe UI", 10)
-F_BOLD   = ("Segoe UI", 10, "bold")
-F_SMALL  = ("Segoe UI", 9)
-F_MONO   = ("Consolas", 9)
 
 # ---------------------------------------------------------------------------
 # PDF helpers
@@ -165,7 +152,6 @@ def _draw_half(c, x0, data):
         c.rect(ML, y - rh, LABEL_W, rh, fill=1, stroke=1)
         c.setFillColor(colors.black); c.setFont("Helvetica-Bold", 8)
         c.drawString(ML + 1.5 * mm, y - rh / 2 - 1.5, label)
-
         c.setFillColor(colors.white)
         c.rect(ML + LABEL_W, y - rh, VALUE_W, rh, fill=1, stroke=1)
         c.setFillColor(colors.black)
@@ -254,8 +240,11 @@ def generate_pdf(row, out_path):
     c.line(HALF_W, 8 * mm, HALF_W, PAGE_H - 8 * mm)
     c.setDash(); c.save()
 
+# ---------------------------------------------------------------------------
+# Generation orchestrator
+# ---------------------------------------------------------------------------
+
 def mark_pdf_done(xlsx_path, sheet, excel_row):
-    """Write TRUE to the 'pdf' column for the given Excel row (1-indexed)."""
     try:
         from openpyxl import load_workbook
         wb = load_workbook(xlsx_path)
@@ -263,12 +252,11 @@ def mark_pdf_done(xlsx_path, sheet, excel_row):
         headers = [c.value for c in next(ws.iter_rows(min_row=1, max_row=1))]
         if "pdf" not in headers:
             return
-        col = headers.index("pdf") + 1   # 1-indexed
+        col = headers.index("pdf") + 1
         ws.cell(row=excel_row, column=col).value = True
         wb.save(xlsx_path)
     except Exception:
-        pass   # non-bloquant
-
+        pass
 
 def generate(rows, year, sheet, xlsx_path, log_fn, progress_fn):
     out_dir = OUTPUT_DIR / year / sheet
@@ -293,47 +281,116 @@ def generate(rows, year, sheet, xlsx_path, log_fn, progress_fn):
     return out_dir
 
 # ---------------------------------------------------------------------------
-# GUI helpers
+# GUI
 # ---------------------------------------------------------------------------
 
-def divider(parent, bg=BORDER, orient="h", **kw):
-    if orient == "h":
-        return tk.Frame(parent, bg=bg, height=1, **kw)
-    return tk.Frame(parent, bg=bg, width=1, **kw)
-
-def label(parent, text, font=F_BODY, fg=TEXT, bg=CARD, **kw):
-    return tk.Label(parent, text=text, font=font, fg=fg, bg=bg, **kw)
-
-def ghost_btn(parent, text, cmd, **kw):
-    return tk.Button(
-        parent, text=text, command=cmd,
-        bg=CARD, fg=TEXT, font=F_BODY,
-        relief="solid", bd=1, padx=10, pady=5,
-        highlightbackground=BORDER, highlightthickness=0,
-        activebackground=BG, activeforeground=TEXT,
-        cursor="hand2", **kw,
-    )
-
-def accent_btn(parent, text, cmd, **kw):
-    return tk.Button(
-        parent, text=text, command=cmd,
-        bg=ACCENT, fg="white", font=F_BOLD,
-        relief="flat", bd=0, padx=20, pady=10,
-        activebackground=ACCENT_H, activeforeground="white",
-        cursor="hand2", **kw,
-    )
-
 # ---------------------------------------------------------------------------
-# App
+# Charte graphique
 # ---------------------------------------------------------------------------
+# Fond global       — bleu nuit profond
+BG         = "#0D1B2A"
+# Cards / surfaces  — légèrement plus clair
+CARD       = "#1B2A3B"
+# Inputs / list bg  — encore plus sombre pour le contraste
+INPUT_BG   = "#0A1628"
+# Header            — bleu Dinan institutionnel
+HEADER     = "#1F4E79"
+# Accent principal  — bleu électrique
+ACCENT     = "#3B82F6"
+ACCENT_HOV = "#2563EB"
+# Boutons secondaires
+BTN        = "#253347"
+BTN_HOV    = "#2E3F55"
+# Texte
+TEXT       = "#E2E8F0"   # blanc cassé
+TEXT_SUB   = "#94A3B8"   # gris-bleu
+TEXT_DIM   = "#475569"   # labels discrets
+# Lignes / bordures
+BORDER     = "#1E3A52"
+# Lignes alternées de la liste
+ROW_ODD    = "#111F2E"
+ROW_EVEN   = "#0D1B2A"
+ROW_SEL    = "#1E3A5F"
 
-class App(tk.Tk):
+
+PLACEHOLDER_PERIOD = "— Sélectionner la période —"
+
+TIPS = {
+    "fichier": (
+        "Nom attendu du fichier :\n"
+        "YYYY-suivi-missions-argent-de-poche.xlsx\n\n"
+        "Exemple : 2026-suivi-missions-argent-de-poche.xlsx\n\n"
+        "L'année est extraite automatiquement du nom."
+    ),
+    "periode": (
+        "Le fichier Excel doit contenir\n"
+        "les feuilles suivantes (noms exacts) :\n\n"
+        "  • missions_hiver\n"
+        "  • missions_printemps\n"
+        "  • missions_ete\n"
+        "  • missions_automne\n\n"
+        "Les autres feuilles ne sont pas touchées."
+    ),
+    "export": (
+        "Les PDF sont générés dans :\n"
+        "output/YYYY/missions_saison/\n\n"
+        "Nom de chaque fichier :\n"
+        "YYYY-MM-DD_HHhMM-HHhMM_lieu-rdv.pdf\n\n"
+        "La colonne 'pdf' du tableau est\n"
+        "passée à TRUE après chaque génération."
+    ),
+}
+
+
+class Tooltip:
+    def __init__(self, widget, text):
+        self._widget = widget
+        self._text   = text
+        self._tip    = None
+        self._job    = None
+        widget.bind("<Enter>", self._schedule)
+        widget.bind("<Leave>", self._hide)
+
+    def _schedule(self, _=None):
+        self._cancel()
+        self._job = self._widget.after(400, self._show)
+
+    def _cancel(self):
+        if self._job:
+            self._widget.after_cancel(self._job)
+            self._job = None
+
+    def _hide(self, _=None):
+        self._cancel()
+        if self._tip:
+            self._tip.destroy()
+            self._tip = None
+
+    def _show(self):
+        x = self._widget.winfo_rootx() + self._widget.winfo_width() + 10
+        y = self._widget.winfo_rooty() + self._widget.winfo_height() // 2 - 10
+        self._tip = tk.Toplevel(self._widget)
+        self._tip.wm_overrideredirect(True)
+        self._tip.wm_geometry(f"+{x}+{y}")
+        self._tip.lift()
+        outer = tk.Frame(self._tip, bg=BORDER, padx=1, pady=1)
+        outer.pack()
+        tk.Label(
+            outer, text=self._text,
+            bg="#1B2A3B", fg=TEXT,
+            font=("Segoe UI", 12),
+            justify="left", padx=20, pady=14,
+            wraplength=420,
+        ).pack()
+
+
+class App(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("Missions Argent de Poche")
-        self.configure(bg=BG)
-        self.resizable(True, True)
-        self.minsize(740, 620)
+        self.title('Atelier du 5 bis — Générateur de PDF des missions "Argent de poche"')
+        self.geometry("900x680")
+        self.minsize(740, 560)
+        self.configure(fg_color=BG)
 
         self._xlsx_path  = tk.StringVar()
         self._sheet_var  = tk.StringVar()
@@ -342,294 +399,281 @@ class App(tk.Tk):
         self._df         = None
         self._xlsx_str   = ""
         self._sheet_name = ""
+        self._year       = "0000"
         self._check_vars    = []
         self._check_widgets = []
-        self._year          = "0000"
 
-        self._setup_ttk()
         self._build()
         self._poll_log()
-
-    def _setup_ttk(self):
-        s = ttk.Style(self)
-        s.theme_use("clam")
-        s.configure("TCombobox",
-                    fieldbackground=CARD, background=CARD,
-                    foreground=TEXT, bordercolor=BORDER,
-                    selectbackground=ACCENT, selectforeground="white",
-                    padding=5)
-        s.configure("App.Horizontal.TProgressbar",
-                    troughcolor=BORDER, background=ACCENT,
-                    bordercolor=BG, lightcolor=ACCENT, darkcolor=ACCENT)
-        s.configure("TScrollbar",
-                    background=BG, troughcolor=BG,
-                    bordercolor=BG, arrowcolor=MUTED,
-                    gripcount=0)
-        s.map("TScrollbar", background=[("active", BORDER)])
 
     # ── Layout ───────────────────────────────────────────────────────────────
 
     def _build(self):
-        self._build_header()
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(0, weight=1)
 
-        body = tk.Frame(self, bg=BG)
-        body.pack(fill="both", expand=True, padx=20, pady=16)
-        body.columnconfigure(0, weight=1)
-        body.rowconfigure(2, weight=1)   # list grows
+        self._build_body()
+
+        ctk.CTkLabel(
+            self, text=f"v{APP_VERSION}",
+            font=ctk.CTkFont(size=10),
+            text_color=TEXT_DIM, fg_color="transparent",
+        ).grid(row=1, column=0, sticky="e", padx=12, pady=(0, 6))
+
+    def _build_body(self):
+        body = ctk.CTkFrame(self, fg_color="transparent")
+        body.grid(row=0, column=0, sticky="nsew", padx=20, pady=(20, 16))
+        body.grid_columnconfigure(0, weight=1)
+        body.grid_rowconfigure(1, weight=1)   # list grows
 
         self._build_source(body, row=0)
-        tk.Frame(body, bg=BG, height=10).grid(row=1, column=0, sticky="ew")
-        self._build_list(body, row=2)
-        self._build_actions(body, row=3)
-        self._build_log(body, row=4)
+        self._build_list(body, row=1)
+        self._build_actions(body, row=2)
 
-    # ── Header ────────────────────────────────────────────────────────────────
-
-    def _build_header(self):
-        hdr = tk.Frame(self, bg=HEADER_BG)
-        hdr.pack(fill="x")
-
-        inner = tk.Frame(hdr, bg=HEADER_BG)
-        inner.pack(fill="x", padx=20, pady=12)
-
-        # Logo
-        self._logo_img = None
-        if LOGO_PATH.exists():
-            try:
-                raw = tk.PhotoImage(file=str(LOGO_PATH))
-                # target ~48px; logo is 289px
-                factor = max(1, raw.width() // 48)
-                self._logo_img = raw.subsample(factor, factor)
-                tk.Label(inner, image=self._logo_img,
-                         bg=HEADER_BG, bd=0).pack(side="left", padx=(0, 14))
-            except Exception:
-                pass
-
-        col = tk.Frame(inner, bg=HEADER_BG)
-        col.pack(side="left")
-        tk.Label(col, text="Missions Argent de Poche",
-                 font=F_TITLE, fg=HEADER_FG, bg=HEADER_BG).pack(anchor="w")
-        tk.Label(col, text="Génération d'attestations PDF",
-                 font=F_SMALL, fg="#93C5FD", bg=HEADER_BG).pack(anchor="w")
-
-    # ── Source card ───────────────────────────────────────────────────────────
+    # ── Source ────────────────────────────────────────────────────────────────
 
     def _build_source(self, parent, row):
-        card = tk.Frame(parent, bg=CARD, bd=1, relief="solid",
-                        highlightbackground=BORDER, highlightthickness=0)
-        card.grid(row=row, column=0, sticky="ew")
-        card.columnconfigure(0, weight=1)
+        card = ctk.CTkFrame(parent, fg_color=CARD, corner_radius=10)
+        card.grid(row=row, column=0, sticky="ew", pady=(0, 14))
+        card.grid_columnconfigure(0, weight=1)
 
-        inner = tk.Frame(card, bg=CARD)
-        inner.pack(fill="x", padx=16, pady=12)
-        inner.columnconfigure(1, weight=1)
+        inner = ctk.CTkFrame(card, fg_color="transparent")
+        inner.pack(fill="x", padx=20, pady=16)
+        inner.columnconfigure(0, weight=1)
 
-        # Row 0: file picker
-        label(inner, "Fichier Excel", font=F_SMALL, fg=MUTED, bg=CARD
-              ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 4))
+        # File + browse on one line
+        file_row = tk.Frame(inner, bg=CARD)
+        file_row.pack(fill="x", pady=(0, 12))
+        file_row.columnconfigure(0, weight=1)
 
-        entry = tk.Entry(inner, textvariable=self._xlsx_path,
-                         state="readonly", font=F_BODY,
-                         bg="#F8FAFC", fg=TEXT, relief="solid", bd=1,
-                         readonlybackground="#F8FAFC",
-                         highlightbackground=BORDER)
-        entry.grid(row=1, column=0, columnspan=2, sticky="ew",
-                   ipady=5, padx=(0, 8))
-
-        ghost_btn(inner, "Parcourir…", self._browse
-                  ).grid(row=1, column=2, sticky="e")
-
-        divider(inner, bg=BORDER).grid(
-            row=2, column=0, columnspan=3, sticky="ew", pady=10)
-
-        # Row 1: period + load
-        label(inner, "Période", font=F_SMALL, fg=MUTED, bg=CARD
-              ).grid(row=3, column=0, sticky="w", pady=(0, 4))
-
-        period_row = tk.Frame(inner, bg=CARD)
-        period_row.grid(row=4, column=0, columnspan=3, sticky="w")
-
-        self._combo = ttk.Combobox(
-            period_row,
-            textvariable=self._sheet_var,
-            values=[SHEET_LABELS[s] for s in VALID_SHEETS],
-            state="readonly", width=16, font=F_BODY,
+        self._entry = ctk.CTkEntry(
+            file_row,
+            textvariable=self._xlsx_path,
+            state="readonly",
+            placeholder_text="Sélectionner le fichier Excel…",
+            font=ctk.CTkFont(size=12),
+            fg_color=INPUT_BG, border_color=BORDER,
+            text_color=TEXT, placeholder_text_color=TEXT_DIM,
+            height=38, corner_radius=6,
         )
+        self._entry._entry.configure(cursor="hand2")
+        self._entry.bind("<Button-1>", lambda _: self._browse())
+        self._entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
+
+        ctk.CTkButton(
+            file_row, text="Parcourir", width=110, height=38,
+            fg_color=BTN, hover_color=BTN_HOV,
+            text_color=TEXT,
+            corner_radius=6, font=ctk.CTkFont(size=12),
+            command=self._browse,
+        ).pack(side="left", padx=(0, 8))
+
+        tip_file = ctk.CTkLabel(
+            file_row, text="ⓘ", width=28,
+            font=ctk.CTkFont(size=15, weight="bold"),
+            text_color=ACCENT, fg_color="transparent", cursor="question_arrow",
+        )
+        tip_file.pack(side="left")
+        Tooltip(tip_file, TIPS["fichier"])
+
+        # Divider
+        ctk.CTkFrame(inner, height=1, fg_color=BORDER, corner_radius=0
+                     ).pack(fill="x", pady=(0, 12))
+
+        # Period + load on one line
+        period_row = tk.Frame(inner, bg=CARD)
+        period_row.pack(fill="x")
+
+        self._combo = ctk.CTkComboBox(
+            period_row,
+            variable=self._sheet_var,
+            values=[SHEET_LABELS[s] for s in VALID_SHEETS],
+            state="readonly",
+            width=260, height=38,
+            fg_color=INPUT_BG, border_color=BORDER,
+            text_color=TEXT,
+            button_color=BTN, button_hover_color=BTN_HOV,
+            dropdown_fg_color=CARD, dropdown_text_color=TEXT,
+            dropdown_hover_color=BTN,
+            font=ctk.CTkFont(size=12),
+            corner_radius=6,
+        )
+        self._combo.set(PLACEHOLDER_PERIOD)
+        self._combo._entry.configure(cursor="hand2")
+        self._combo._entry.bind("<Button-1>", lambda _: self._combo._open_dropdown_menu())
         self._combo.pack(side="left", padx=(0, 10))
 
-        ghost_btn(period_row, "Charger les missions",
-                  self._load_missions).pack(side="left")
+        ctk.CTkButton(
+            period_row, text="Charger les missions", height=38,
+            fg_color=BTN, hover_color=BTN_HOV, text_color=TEXT,
+            corner_radius=6, font=ctk.CTkFont(size=12),
+            command=self._load_missions,
+        ).pack(side="left", padx=(0, 8))
+
+        tip_period = ctk.CTkLabel(
+            period_row, text="ⓘ", width=28,
+            font=ctk.CTkFont(size=15, weight="bold"),
+            text_color=ACCENT, fg_color="transparent", cursor="question_arrow",
+        )
+        tip_period.pack(side="left")
+        Tooltip(tip_period, TIPS["periode"])
 
     # ── Mission list ──────────────────────────────────────────────────────────
 
     def _build_list(self, parent, row):
-        wrap = tk.Frame(parent, bg=CARD, bd=1, relief="solid",
-                        highlightbackground=BORDER, highlightthickness=0)
-        wrap.grid(row=row, column=0, sticky="nsew")
-        wrap.columnconfigure(0, weight=1)
-        wrap.rowconfigure(1, weight=1)
+        card = ctk.CTkFrame(parent, fg_color=CARD, corner_radius=10)
+        card.grid(row=row, column=0, sticky="nsew", pady=(0, 14))
+        card.grid_columnconfigure(0, weight=1)
+        card.grid_rowconfigure(2, weight=1)
+
+        # Top bar: label + counter
+        top = ctk.CTkFrame(card, fg_color="transparent")
+        top.grid(row=0, column=0, sticky="ew", padx=20, pady=(14, 10))
+        top.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(top, text="MISSIONS",
+                     font=ctk.CTkFont(size=10, weight="bold"),
+                     text_color=TEXT_DIM).grid(row=0, column=0, sticky="w")
+
+        self._sel_label = ctk.CTkLabel(
+            top, text="—",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color=TEXT_SUB)
+        self._sel_label.grid(row=0, column=1, sticky="e")
 
         # Toolbar
-        tb = tk.Frame(wrap, bg=CARD)
-        tb.grid(row=0, column=0, columnspan=2, sticky="ew", padx=12, pady=8)
+        tb = ctk.CTkFrame(card, fg_color="transparent")
+        tb.grid(row=1, column=0, sticky="w", padx=20, pady=(0, 10))
 
-        ghost_btn(tb, "✓  Tout cocher",   self._check_all).pack(side="left", padx=(0, 6))
-        ghost_btn(tb, "✕  Tout décocher", self._uncheck_all).pack(side="left", padx=(0, 16))
+        ctk.CTkButton(
+            tb, text="Tout cocher", width=120, height=30,
+            fg_color=BTN, hover_color=BTN_HOV, text_color=TEXT,
+            corner_radius=6, font=ctk.CTkFont(size=12),
+            command=self._check_all,
+        ).pack(side="left", padx=(0, 8))
 
-        tk.Frame(tb, bg=BORDER, width=1).pack(side="left", fill="y", pady=2, padx=(0, 12))
+        ctk.CTkButton(
+            tb, text="Tout décocher", width=130, height=30,
+            fg_color=BTN, hover_color=BTN_HOV, text_color=TEXT,
+            corner_radius=6, font=ctk.CTkFont(size=12),
+            command=self._uncheck_all,
+        ).pack(side="left")
 
-        self._sel_label = tk.Label(tb, text="—", font=F_SMALL, fg=MUTED, bg=CARD)
-        self._sel_label.pack(side="left")
-
-        divider(wrap, bg=BORDER).grid(row=1, column=0, columnspan=2, sticky="ew")
-
-        # Scrollable canvas
-        self._list_canvas = tk.Canvas(wrap, bg=CARD, highlightthickness=0)
-        self._list_canvas.grid(row=2, column=0, sticky="nsew")
-        wrap.rowconfigure(2, weight=1)
-
-        vbar = ttk.Scrollbar(wrap, orient="vertical",
-                              command=self._list_canvas.yview)
-        vbar.grid(row=2, column=1, sticky="ns")
-
-        hbar = ttk.Scrollbar(wrap, orient="horizontal",
-                              command=self._list_canvas.xview)
-        hbar.grid(row=3, column=0, columnspan=2, sticky="ew")
-
-        self._list_canvas.configure(
-            yscrollcommand=vbar.set, xscrollcommand=hbar.set)
-
-        self._list_frame = tk.Frame(self._list_canvas, bg=CARD)
-        self._list_win = self._list_canvas.create_window(
-            (0, 0), window=self._list_frame, anchor="nw")
-
-        self._list_frame.bind("<Configure>", lambda e: self._list_canvas.configure(
-            scrollregion=self._list_canvas.bbox("all")))
-        self._list_canvas.bind("<MouseWheel>",
-            lambda e: self._list_canvas.yview_scroll(
-                int(-1 * e.delta / 120), "units"))
-
-        self._placeholder = label(
-            self._list_frame,
-            "Chargez un fichier et sélectionnez une période.",
-            font=F_SMALL, fg=MUTED, bg=CARD, pady=24,
+        # Scrollable list
+        self._list_frame = ctk.CTkScrollableFrame(
+            card, corner_radius=6,
+            fg_color=INPUT_BG,
+            border_width=1, border_color=BORDER,
+            scrollbar_button_color=BTN,
+            scrollbar_button_hover_color=BTN_HOV,
         )
-        self._placeholder.pack()
+        self._list_frame.grid(row=2, column=0, sticky="nsew", padx=20, pady=(0, 16))
+        self._list_frame.grid_columnconfigure(0, weight=1)
 
-    # ── Actions (generate + progress) ─────────────────────────────────────────
+        self._placeholder = ctk.CTkLabel(
+            self._list_frame,
+            text="Chargez un fichier et sélectionnez une période.",
+            font=ctk.CTkFont(size=12),
+            text_color=TEXT_DIM,
+        )
+        self._placeholder.pack(pady=40)
+
+    # ── Actions ───────────────────────────────────────────────────────────────
 
     def _build_actions(self, parent, row):
-        frame = tk.Frame(parent, bg=BG)
-        frame.grid(row=row, column=0, sticky="ew", pady=(12, 0))
-        frame.columnconfigure(0, weight=1)
+        card = ctk.CTkFrame(parent, fg_color=CARD, corner_radius=10)
+        card.grid(row=row, column=0, sticky="ew")
+        card.grid_columnconfigure(0, weight=1)
 
-        # Generate button — centered
-        btn_frame = tk.Frame(frame, bg=BG)
-        btn_frame.grid(row=0, column=0)  # pas sticky="ew" → centré naturellement
+        # Ligne 1 : boutons centrés
+        btn_row = ctk.CTkFrame(card, fg_color="transparent")
+        btn_row.pack(pady=(16, 10))
 
-        self._btn_gen = tk.Button(
-            btn_frame,
-            text="Générer les PDF sélectionnés",
-            command=self._start,
-            bg=ACCENT_D, fg="#FFFFFF",
-            relief="flat", bd=0, font=F_BOLD,
-            padx=20, pady=10,
-            state="disabled", cursor="arrow",
+        tip_gen = ctk.CTkLabel(
+            btn_row, text="ⓘ", width=28,
+            font=ctk.CTkFont(size=15, weight="bold"),
+            text_color=ACCENT, fg_color="transparent", cursor="question_arrow",
         )
-        self._btn_gen.pack(side="left", padx=(0, 10))
+        tip_gen.pack(side="left", padx=(0, 8))
+        Tooltip(tip_gen, TIPS["export"])
 
-        self._btn_open = tk.Button(
-            btn_frame,
-            text="↗  Ouvrir le dossier output",
+        self._btn_gen = ctk.CTkButton(
+            btn_row,
+            text="Générer les PDF sélectionnés",
+            width=250, height=42,
+            font=ctk.CTkFont(size=13, weight="bold"),
+            state="disabled",
+            fg_color=BTN, hover_color=BTN_HOV, text_color=TEXT_SUB,
+            corner_radius=6,
+            command=self._start,
+        )
+        self._btn_gen.pack(side="left", padx=(0, 20))
+
+        self._btn_open = ctk.CTkButton(
+            btn_row,
+            text="↗  Ouvrir le dossier",
+            width=170, height=42,
+            font=ctk.CTkFont(size=13),
+            state="disabled",
+            fg_color=BTN, hover_color=BTN_HOV, text_color=TEXT_SUB,
+            corner_radius=6,
             command=self._open_output,
-            bg=BORDER, fg=MUTED, font=F_BOLD,
-            relief="solid", bd=1, padx=12, pady=9,
-            state="disabled", cursor="arrow",
         )
         self._btn_open.pack(side="left")
 
-        # Progress
-        prog = tk.Frame(frame, bg=BG)
-        prog.grid(row=1, column=0, sticky="ew", pady=(10, 0))
-        prog.columnconfigure(0, weight=1)
+        # Ligne 2 : label + barre de progression (cachée au repos)
+        prog_wrap = ctk.CTkFrame(card, fg_color="transparent")
+        prog_wrap.pack(fill="x", padx=20, pady=(0, 16))
 
-        self._progress = ttk.Progressbar(
-            prog, orient="horizontal", mode="determinate",
-            style="App.Horizontal.TProgressbar")
-        self._progress.grid(row=0, column=0, sticky="ew")
-
-        self._prog_label = tk.Label(
-            prog, text="", font=F_SMALL, fg=MUTED, bg=BG, width=14, anchor="e")
-        self._prog_label.grid(row=0, column=1, padx=(8, 0))
-
-    # ── Log ───────────────────────────────────────────────────────────────────
-
-    def _build_log(self, parent, row):
-        frame = tk.Frame(parent, bg=LOG_BG, bd=1, relief="solid",
-                         highlightbackground=BORDER, highlightthickness=0)
-        frame.grid(row=row, column=0, sticky="ew", pady=(12, 0))
-        frame.columnconfigure(0, weight=1)
-
-        self._log = tk.Text(
-            frame, height=5, state="disabled",
-            bg=LOG_BG, fg=LOG_FG, font=F_MONO,
-            relief="flat", padx=12, pady=8,
-            wrap="none",
+        self._prog_label = ctk.CTkLabel(
+            prog_wrap, text="",
+            font=ctk.CTkFont(size=11),
+            text_color=TEXT_SUB, anchor="e",
         )
-        self._log.pack(side="left", fill="both", expand=True)
-        self._log.tag_configure("ok",   foreground=LOG_OK)
-        self._log.tag_configure("err",  foreground=LOG_ERR)
-        self._log.tag_configure("info", foreground=LOG_INFO)
+        self._prog_label.pack(anchor="e", pady=(0, 4))
 
-        sb = ttk.Scrollbar(frame, command=self._log.yview)
-        sb.pack(side="right", fill="y")
-        self._log.configure(yscrollcommand=sb.set)
+        self._progress = ctk.CTkProgressBar(
+            prog_wrap, height=10, corner_radius=5,
+            fg_color=BORDER, progress_color=ACCENT,
+        )
+        self._progress.set(0)
+        # cachée par défaut — affichée au lancement de la génération
 
     # ── Checklist helpers ─────────────────────────────────────────────────────
 
     def _check_all(self):
         for v in self._check_vars:
             v.set(True)
-        self._refresh_colors()
         self._update_sel()
 
     def _uncheck_all(self):
         for v in self._check_vars:
             v.set(False)
-        self._refresh_colors()
         self._update_sel()
-
-    def _on_toggle(self, idx):
-        self._refresh_color(idx)
-        self._update_sel()
-
-    def _row_bg(self, idx):
-        if self._check_vars[idx].get():
-            return ROW_SEL
-        return ROW_ODD if idx % 2 else ROW_EVEN
-
-    def _refresh_color(self, idx):
-        bg = self._row_bg(idx)
-        self._check_widgets[idx].configure(bg=bg, activebackground=bg, selectcolor=bg)
-
-    def _refresh_colors(self):
-        for i in range(len(self._check_vars)):
-            self._refresh_color(i)
 
     def _update_sel(self):
         n = sum(v.get() for v in self._check_vars)
         total = len(self._check_vars)
+
         if total == 0:
-            self._sel_label.config(text="—", fg=MUTED)
+            self._sel_label.configure(text="—")
         else:
-            self._sel_label.config(
+            self._sel_label.configure(
                 text=f"{n} / {total} sélectionnée(s)",
-                fg=ACCENT if n else MUTED,
+                text_color=("#2563EB", "#60A5FA") if n else ("gray50", "gray60"),
             )
+
         if n > 0:
-            self._btn_gen.config(state="normal", bg=ACCENT, cursor="hand2")
+            self._btn_gen.configure(
+                state="normal",
+                fg_color=("#2563EB", "#2563EB"),
+                hover_color=("#1D4ED8", "#1D4ED8"),
+            )
         else:
-            self._btn_gen.config(state="disabled", bg=ACCENT_D, cursor="arrow")
+            self._btn_gen.configure(
+                state="disabled",
+                fg_color=("gray70", "gray35"),
+            )
 
     def _clear_list(self):
         for w in self._check_widgets:
@@ -642,6 +686,7 @@ class App(tk.Tk):
     # ── Load ──────────────────────────────────────────────────────────────────
 
     def _browse(self):
+        from tkinter import filedialog
         path = filedialog.askopenfilename(
             title="Sélectionner le fichier missions",
             filetypes=[("Excel", "*.xlsx")],
@@ -650,13 +695,15 @@ class App(tk.Tk):
             self._xlsx_path.set(path)
 
     def _load_missions(self):
-        xlsx  = self._xlsx_path.get()
-        lbl   = self._sheet_var.get()
+        from tkinter import messagebox
+        xlsx = self._xlsx_path.get()
+        lbl  = self._sheet_var.get()
+
         if not xlsx:
             messagebox.showwarning("Fichier manquant",
                                    "Veuillez sélectionner un fichier Excel.")
             return
-        if not lbl:
+        if not lbl or lbl == PLACEHOLDER_PERIOD:
             messagebox.showwarning("Période manquante",
                                    "Veuillez choisir une période.")
             return
@@ -664,7 +711,6 @@ class App(tk.Tk):
         sheet = VALID_SHEETS[[SHEET_LABELS[s] for s in VALID_SHEETS].index(lbl)]
         try:
             df = pd.read_excel(xlsx, sheet_name=sheet)
-            # Track Excel row BEFORE any filtering (header = row 1, data starts row 2)
             df["_excel_row"] = range(2, len(df) + 2)
             df = df.drop(columns=["nom_jeune"], errors="ignore")
             df = df.dropna(subset=["h_debut", "h_fin", "description"])
@@ -673,14 +719,17 @@ class App(tk.Tk):
             messagebox.showerror("Erreur de lecture", str(e))
             return
 
-        self._df = df
-        self._xlsx_str = xlsx   # keep for write-back
+        self._df         = df
+        self._xlsx_str   = xlsx
         self._sheet_name = sheet
         m = re.match(r"(\d{4})-suivi-missions", Path(xlsx).name)
         self._year = m.group(1) if m else "0000"
 
         self._clear_list()
-        self._btn_open.grid_remove()
+        self._progress.pack_forget()
+        self._prog_label.configure(text="")
+        self._btn_open.configure(state="disabled",
+                                 fg_color=("gray70", "gray35"))
 
         for idx, (_, row) in enumerate(df.iterrows()):
             var = tk.BooleanVar(value=False)
@@ -688,30 +737,28 @@ class App(tk.Tk):
 
             date_str = format_date_display(row["date"])
             desc = str(row["description"])
-            line = f"  {date_str}   {str(row['h_debut'])}-{str(row['h_fin'])}   {desc}"
+            line = f"{date_str}   {str(row['h_debut'])}-{str(row['h_fin'])}   {desc}"
 
-            bg = ROW_ODD if idx % 2 else ROW_EVEN
-            cb = tk.Checkbutton(
+            cb = ctk.CTkCheckBox(
                 self._list_frame,
-                text=line, variable=var,
-                anchor="w", font=F_MONO,
-                bg=bg, activebackground=bg,
-                fg=TEXT, selectcolor=bg,
-                relief="flat", bd=0,
-                command=lambda i=idx: self._on_toggle(i),
+                text=line,
+                variable=var,
+                font=ctk.CTkFont(family="Consolas", size=11),
+                command=self._update_sel,
+                checkbox_width=18, checkbox_height=18,
+                corner_radius=4,
             )
-            cb.pack(fill="x", padx=0, pady=0)
+            cb.grid(row=idx, column=0, sticky="w", padx=10, pady=2)
             self._check_widgets.append(cb)
 
         self._update_sel()
-        self._log_clear()
-        self._log_write(("info", f"Chargé : {len(df)} mission(s) — {lbl}\n"))
 
     # ── Generate ──────────────────────────────────────────────────────────────
 
     def _start(self):
         if self._df is None or not self._check_vars:
             return
+
         lbl   = self._sheet_var.get()
         sheet = VALID_SHEETS[[SHEET_LABELS[s] for s in VALID_SHEETS].index(lbl)]
         rows  = [self._df.iloc[i]
@@ -719,16 +766,17 @@ class App(tk.Tk):
         if not rows:
             return
 
-        self._btn_gen.config(state="disabled", bg=ACCENT_D, cursor="arrow")
-        self._btn_open.config(state="disabled", bg=BORDER, fg=MUTED, cursor="arrow")
-        self._progress["value"] = 0
-        self._prog_label.config(text="")
-        self._log_clear()
+        self._btn_gen.configure(state="disabled", fg_color=("gray70", "gray35"))
+        self._btn_open.configure(state="disabled", fg_color=BTN, text_color=TEXT_SUB)
+        self._progress.set(0)
+        self._progress.pack(fill="x")
+        self._prog_label.configure(text="")
 
         threading.Thread(
             target=self._run,
             args=(rows, self._year, sheet, self._xlsx_str),
-            daemon=True).start()
+            daemon=True,
+        ).start()
 
     def _run(self, rows, year, sheet, xlsx_path):
         try:
@@ -751,33 +799,27 @@ class App(tk.Tk):
                 msg = self._log_queue.get_nowait()
                 if msg == "__DONE__":
                     self._uncheck_all()
-                    self._btn_open.config(
-                        state="normal", bg=CARD, fg=ACCENT, cursor="hand2")
+                    self._progress.set(1)
+                    self._prog_label.configure(text="Génération terminée ✓")
+                    self._btn_open.configure(
+                        state="normal",
+                        fg_color=ACCENT, hover_color=ACCENT_HOV,
+                        text_color=TEXT,
+                    )
                 elif msg == "__ERR__":
                     self._update_sel()
                 elif isinstance(msg, tuple) and msg[0] == "__PROGRESS__":
                     _, cur, tot = msg
-                    pct = int(cur / tot * 100) if tot else 0
-                    self._progress["maximum"] = tot
-                    self._progress["value"]   = cur
-                    self._prog_label.config(text=f"{cur}/{tot}  {pct}%")
-                else:
-                    self._log_write(msg)
+                    val = cur / tot if tot else 0
+                    pct = int(val * 100)
+                    self._progress.set(val)
+                    self._prog_label.configure(text=f"{cur} / {tot}  —  {pct} %")
+                elif isinstance(msg, tuple) and msg[0] == "err":
+                    from tkinter import messagebox
+                    messagebox.showerror("Erreur", msg[1])
         except queue.Empty:
             pass
         self.after(100, self._poll_log)
-
-    def _log_write(self, msg):
-        tag, text = msg if isinstance(msg, tuple) else ("info", msg)
-        self._log.configure(state="normal")
-        self._log.insert("end", text, tag)
-        self._log.see("end")
-        self._log.configure(state="disabled")
-
-    def _log_clear(self):
-        self._log.configure(state="normal")
-        self._log.delete("1.0", "end")
-        self._log.configure(state="disabled")
 
     def _open_output(self):
         if self._out_dir and self._out_dir.exists():
