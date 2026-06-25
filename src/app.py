@@ -402,7 +402,7 @@ class Tooltip:
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title('Atelier du 5 bis — Générateur de PDF des missions "Argent de poche"')
+        self.title("Dioui")
         self.geometry("900x680")
         self.minsize(740, 560)
         self.configure(fg_color=BG)
