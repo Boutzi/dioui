@@ -80,7 +80,7 @@ jobs:
           Categories=Office;
           EOF
 
-          cp src/assets/logo.png AppDir/Dioui.png
+          cp src/assets/dioui.svg AppDir/Dioui.svg
 
           wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
           chmod +x appimagetool-x86_64.AppImage
@@ -116,11 +116,9 @@ jobs:
           tag_name: v${{ steps.version.outputs.version }}
           name: "Dioui v${{ steps.version.outputs.version }}"
           body: |
-            ## Dioui v${{ steps.version.outputs.version }}
-
             ### Téléchargements
             - **Windows** : `Dioui.exe`
-            - **Linux (Ubuntu)** : `Dioui.AppImage` — double-clic pour lancer, aucune installation requise
+            - **Linux (Ubuntu)** : `Dioui.AppImage`
           files: |
             artifacts/Dioui.exe-v${{ steps.version.outputs.version }}/Dioui.exe
             artifacts/Dioui.AppImage-v${{ steps.version.outputs.version }}/Dioui.AppImage
