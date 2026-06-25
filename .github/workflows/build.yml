@@ -47,7 +47,7 @@ jobs:
       - name: Install system deps
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y python3-tk libfuse2 librsvg2-bin
+          sudo apt-get install -y python3-tk libfuse2
 
       - name: Install deps
         run: pip install -r requirements.txt pyinstaller
@@ -80,7 +80,7 @@ jobs:
           Categories=Office;
           EOF
 
-          rsvg-convert -w 256 -h 256 src/assets/dioui.svg -o AppDir/Dioui.png
+          cp src/assets/dioui.png AppDir/Dioui.png
 
           wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
           chmod +x appimagetool-x86_64.AppImage
