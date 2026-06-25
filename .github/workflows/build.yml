@@ -74,13 +74,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
-          name: "v${{ steps.version.outputs.version }}"
+          name: "Dioui v${{ steps.version.outputs.version }}"
           body: |
-            ## Générateur ADP v${{ steps.version.outputs.version }}
+            ## Dioui v${{ steps.version.outputs.version }}
 
             ### Téléchargements
-            - **Windows** : `GenerateurADP.exe`
-            - **Linux (Ubuntu)** : `GenerateurADP-linux`
+            - **Windows** : `Dioui.exe`
+            - **Linux (Ubuntu)** : `Dioui-linux`
           files: |
             artifacts/Dioui.exe-v${{ steps.version.outputs.version }}/Dioui.exe
             artifacts/Dioui-linux-v${{ steps.version.outputs.version }}/Dioui
