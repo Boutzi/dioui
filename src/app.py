@@ -1,4 +1,5 @@
 import sys
+import os
 import re
 import unicodedata
 import subprocess
@@ -36,7 +37,11 @@ def _read_version():
 APP_VERSION = _read_version()
 
 BASE_DIR   = Path(__file__).parent.parent
-OUTPUT_DIR = BASE_DIR / "output"
+# Sous AppImage ou onefile PyInstaller, /tmp est read-only → output dans le home
+if os.environ.get("APPIMAGE") or getattr(sys, "frozen", False):
+    OUTPUT_DIR = Path.home() / "Dioui" / "output"
+else:
+    OUTPUT_DIR = BASE_DIR / "output"
 _BASE      = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
 ASSETS_DIR = _BASE / "assets"
 LOGO_PATH  = ASSETS_DIR / "logo-white.png"
