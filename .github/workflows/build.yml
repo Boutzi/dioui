@@ -5,19 +5,8 @@ on:
     branches: [main]
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        include:
-          - os: windows-latest
-            artifact: Dioui.exe
-            exe_path: dist/Dioui.exe
-          - os: ubuntu-latest
-            artifact: Dioui-linux
-            exe_path: dist/Dioui
-
-    runs-on: ${{ matrix.os }}
-
+  build-windows:
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -25,13 +14,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install system deps (Linux only)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y python3-tk
-
-      - name: Install Python deps
+      - name: Install deps
         run: pip install -r requirements.txt pyinstaller
 
       - name: Build
@@ -49,11 +32,68 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}-v${{ steps.version.outputs.version }}
-          path: ${{ matrix.exe_path }}
+          name: Dioui.exe-v${{ steps.version.outputs.version }}
+          path: dist/Dioui.exe
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y python3-tk libfuse2
+
+      - name: Install deps
+        run: pip install -r requirements.txt pyinstaller
+
+      - name: Build onedir
+        run: pyinstaller dioui-linux.spec --noconfirm
+
+      - name: Read version
+        id: version
+        run: echo "version=$(python3 -c "import json; print(json.load(open('package.json'))['version'])")" >> $GITHUB_OUTPUT
+
+      - name: Create AppImage
+        run: |
+          mkdir -p AppDir
+          cp -r dist/Dioui/* AppDir/
+
+          cat > AppDir/AppRun << 'EOF'
+          #!/bin/bash
+          HERE="$(dirname "$(readlink -f "${0}")")"
+          exec "$HERE/Dioui" "$@"
+          EOF
+          chmod +x AppDir/AppRun
+
+          cat > AppDir/Dioui.desktop << 'EOF'
+          [Desktop Entry]
+          Name=Dioui
+          Exec=Dioui
+          Icon=Dioui
+          Type=Application
+          Categories=Office;
+          EOF
+
+          cp src/assets/logo.png AppDir/Dioui.png
+
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+          ARCH=x86_64 ./appimagetool-x86_64.AppImage --no-appstream AppDir Dioui.AppImage
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Dioui.AppImage-v${{ steps.version.outputs.version }}
+          path: Dioui.AppImage
 
   release:
-    needs: build
+    needs: [build-windows, build-linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -80,8 +120,8 @@ jobs:
 
             ### Téléchargements
             - **Windows** : `Dioui.exe`
-            - **Linux (Ubuntu)** : `Dioui-linux`
+            - **Linux (Ubuntu)** : `Dioui.AppImage` — double-clic pour lancer, aucune installation requise
           files: |
             artifacts/Dioui.exe-v${{ steps.version.outputs.version }}/Dioui.exe
-            artifacts/Dioui-linux-v${{ steps.version.outputs.version }}/Dioui
+            artifacts/Dioui.AppImage-v${{ steps.version.outputs.version }}/Dioui.AppImage
           make_latest: true
