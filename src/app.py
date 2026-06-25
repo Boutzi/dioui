@@ -406,6 +406,12 @@ class App(ctk.CTk):
         self.geometry("900x680")
         self.minsize(740, 560)
         self.configure(fg_color=BG)
+        _ico = ASSETS_DIR / "dioui.ico"
+        _png = ASSETS_DIR / "dioui.png"
+        if sys.platform == "win32" and _ico.exists():
+            self.iconbitmap(str(_ico))
+        elif _png.exists():
+            self.iconphoto(True, tk.PhotoImage(file=str(_png)))
 
         self._xlsx_path  = tk.StringVar()
         self._sheet_var  = tk.StringVar()
