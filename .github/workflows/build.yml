@@ -10,11 +10,11 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            artifact: GenerateurADP.exe
-            exe_path: dist/GenerateurADP.exe
+            artifact: Dioui.exe
+            exe_path: dist/Dioui.exe
           - os: ubuntu-latest
-            artifact: GenerateurADP-linux
-            exe_path: dist/GenerateurADP
+            artifact: Dioui-linux
+            exe_path: dist/Dioui
 
     runs-on: ${{ matrix.os }}
 
@@ -82,5 +82,6 @@ jobs:
             - **Windows** : `GenerateurADP.exe`
             - **Linux (Ubuntu)** : `GenerateurADP-linux`
           files: |
-            artifacts/**/*
+            artifacts/Dioui.exe-v${{ steps.version.outputs.version }}/Dioui.exe
+            artifacts/Dioui-linux-v${{ steps.version.outputs.version }}/Dioui
           make_latest: true
